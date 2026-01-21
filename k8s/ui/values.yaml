@@ -14,7 +14,7 @@ service:
 
 ingress:
   enabled: true
-  host: test.npp.whiteforge.ai
+  host: npp.whiteforge.ai
 
 resources:
   limits:
