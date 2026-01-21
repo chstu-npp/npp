@@ -1,0 +1,104 @@
+name: UI – Build & Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  NAMESPACE: npp
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}-ui
+  UI_DIR: UI
+
+jobs:
+  build-ui:
+    name: Build & Push UI Docker image
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # нужно для git describe
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get UI version from git tags
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always --dirty)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build & Push UI Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ env.UI_DIR }}
+          file: ./${{ env.UI_DIR }}/Dockerfile
+          push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
+
+  deploy-ui:
+    name: Deploy UI to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-ui
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Configure kubeconfig (base64)
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl get namespace $NAMESPACE || kubectl create namespace $NAMESPACE
+
+      - name: Create registry secret for UI
+        run: |
+          kubectl create secret docker-registry ui-registry \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            --namespace=$NAMESPACE \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Build Helm dependencies (UI)
+        run: helm dependency build ./${{ env.UI_DIR }}/k8s/ui
+
+      - name: Deploy UI with Helm
+        run: |
+          helm upgrade --install ui ./${{ env.UI_DIR }}/k8s/ui \
+            --namespace $NAMESPACE \
+            --set image.repository=ghcr.io/${{ env.IMAGE_NAME }} \
+            --set image.tag=${{ github.sha }} \
+            --wait \
+            --timeout 300s \
+            --atomic
