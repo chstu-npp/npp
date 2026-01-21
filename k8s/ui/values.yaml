@@ -1,8 +1,12 @@
 replicaCount: 1
 image:
-  repository: registry.whiteforge.ai/npp/ui
+  repository: ghcr.io/chstu-npp/npp-ui
   tag: latest
   pullPolicy: Always
+
+imagePullSecrets:
+  - name: ghcr-registry
+
 
 service:
   type: ClusterIP

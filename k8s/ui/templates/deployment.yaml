@@ -16,6 +16,8 @@ spec:
       labels:
         app: {{ .Chart.Name }}
     spec:
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -28,5 +30,3 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      imagePullSecrets:
-        - name: gitlab-registry
