@@ -1,0 +1,25 @@
+replicaCount: 1
+image:
+  repository: registry.whiteforge.ai/npp/ui
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  host: npp.whiteforge.ai
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+nodeSelector:
+  kubernetes.io/hostname: vmi3017244
+
